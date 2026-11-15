@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>サムネイルをまとめて保存</title>
+<style>
+  :root { --ink: #1f1f1f; --dim: #5f5f5f; --line: #c9c9c9; --bg: #f4f4f4; --paper: #ffffff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif; font-size: 15px; line-height: 1.8; word-break: auto-phrase; text-wrap: pretty; }
+  main { max-width: 600px; margin: 48px auto; padding: 0 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  .lead { margin: 0 0 28px; color: var(--dim); }
+  form { padding: 24px; background: var(--paper); border: 1px solid var(--line); }
+  .field { margin: 0 0 22px; }
+  .field > label, .field > .name { display: block; margin-bottom: 6px; font-weight: 600; }
+  .hint { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+  input[type=url], input[type=number] { width: 100%; padding: 10px; border: 1px solid #8a8a8a; border-radius: 0; background: #fff; color: var(--ink); font: inherit; }
+  input[type=number] { width: 8em; }
+  input:focus-visible, button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .choices { display: flex; flex-wrap: wrap; gap: 8px; }
+  .choices label { display: flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--line); cursor: pointer; }
+  .choices input { margin: 0; accent-color: var(--ink); }
+  .choices label:has(input:checked) { border-color: var(--ink); }
+  button { width: 100%; padding: 14px; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { background: var(--dim); border-color: var(--dim); cursor: default; }
+  #status { margin: 20px 0 0; min-height: 1.8em; }
+  .bar { height: 6px; margin-top: 8px; border: 1px solid var(--line); background: #fff; }
+  .bar span { display: block; height: 100%; width: 0; background: var(--ink); }
+  .stop { padding: 24px; background: var(--paper); border: 1px solid var(--line); }
+  @media (prefers-reduced-motion: no-preference) { .bar span { transition: width .2s linear; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>サムネイルをまとめて保存</h1>
+  <p class="lead">YouTubeのチャンネルの動画のサムネイルを、<br>1つのzipファイルにまとめてパソコンに保存します。</p>
+
+  <form id="form">
+    <div class="field">
+      <label for="channel">チャンネルのURL</label>
+      <input id="channel" type="url" placeholder="https://www.youtube.com/@…" autocomplete="off" required>
+      <p class="hint">YouTubeでチャンネルのページを開き、上のアドレス欄のURLをそのまま貼ってください。そのチャンネルの動画のURLでも使えます。</p>
+    </div>
+    <div class="field">
+      <span class="name">並び順</span>
+      <div class="choices" role="radiogroup" aria-label="並び順">
+        <label><input type="radio" name="order" value="new" checked>新しい順</label>
+        <label><input type="radio" name="order" value="old">古い順</label>
+        <label><input type="radio" name="order" value="views">再生数の多い順</label>
+      </div>
+      <p class="hint">ファイル名の先頭に、この順の番号（001、002…）が付きます。</p>
+    </div>
+    <div class="field">
+      <label for="limit">保存する数</label>
+      <input id="limit" type="number" min="1" max="500" value="200" required> 本まで
+      <p class="hint">ショートとライブは含みません。新しいほうから最大500本が対象です。</p>
+    </div>
+    <button id="go" type="submit">サムネイルをまとめて保存</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </form>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+  var LEDGER = 'https://script.google.com/macros/s/AKfycbwQY7jCnHLJxWXFYtVxx8_DqrKZT-c7tAriPBzJBoPLDC5gGSmx2KHVmqPcBuFqFJ_a/exec';
+  var ORDER_NAME = { new: '新しい順', old: '古い順', views: '再生数の多い順' };
+  var key = new URLSearchParams(location.search).get('key') || '';
+  var form = document.getElementById('form');
+  var go = document.getElementById('go');
+  var statusEl = document.getElementById('status');
+
+  function stopPage(text) {
+    var p = document.createElement('p');
+    p.className = 'stop';
+    p.textContent = text;
+    form.replaceWith(p);
+  }
+  if (!/^ytk-[0-9a-f]{20}$/.test(key)) stopPage('このリンクは使えません。担当者から受け取ったリンクを、そのまま開いてください。');
+
+  function say(text, ratio) {
+    statusEl.textContent = text;
+    if (ratio !== undefined) {
+      var bar = document.createElement('div');
+      bar.className = 'bar';
+      var fill = document.createElement('span');
+      fill.style.width = Math.round(ratio * 100) + '%';
+      bar.appendChild(fill);
+      statusEl.appendChild(bar);
+    }
+  }
+
+  // ファイル名に使えない記号を除く（Mac・Windows共通）
+  function safe(s, max) {
+    s = String(s).replace(/[\\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+    return Array.from(s).slice(0, max).join('').replace(/[ .]+$/, '') || 'untitled';
+  }
+
+  function jstDate(iso) {
+    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Tokyo' }).format(new Date(iso));
+  }
+
+  // 最大サイズが無い動画は、同じ動画の一段小さい画像に切り替える
+  async function fetchThumb(v) {
+    var urls = [v.thumb, 'https://i.ytimg.com/vi/' + v.id + '/hqdefault.jpg'].filter(Boolean);
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var r = await fetch(urls[i]);
+        if (r.ok) return await r.blob();
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var channel = document.getElementById('channel').value.trim();
+    var order = form.order.value;
+    var limit = Math.max(1, Math.min(500, Number(document.getElementById('limit').value) || 200));
+    go.disabled = true;
+    say('チャンネルの動画の一覧を受け取っています。数十秒かかることがあります…');
+
+    var j;
+    try {
+      var res = await fetch(LEDGER + '?action=thumbs&key=' + encodeURIComponent(key) + '&channel=' + encodeURIComponent(channel), { credentials: 'omit' });
+      j = await res.json();
+    } catch (err) {
+      say('通信に失敗しました。インターネットの接続を確かめて、もう一度ボタンを押してください。');
+      go.disabled = false;
+      return;
+    }
+    if (!j.ok) {
+      if (j.stopped) return stopPage(j.message);
+      say(j.message);
+      go.disabled = false;
+      return;
+    }
+    var vids = j.videos.slice();
+    if (!vids.length) {
+      say('このチャンネルには、保存できる動画がありませんでした（ショートとライブは含みません）。');
+      go.disabled = false;
+      return;
+    }
+    if (order === 'new') vids.sort(function (a, b) { return a.publishedAt < b.publishedAt ? 1 : -1; });
+    if (order === 'old') vids.sort(function (a, b) { return a.publishedAt > b.publishedAt ? 1 : -1; });
+    if (order === 'views') vids.sort(function (a, b) { return (b.views || 0) - (a.views || 0); });
+    vids = vids.slice(0, limit);
+
+    var zip = new JSZip();
+    var width = Math.max(3, String(vids.length).length);
+    var done = 0, failed = 0, next = 0;
+    async function worker() {
+      while (next < vids.length) {
+        var i = next++;
+        var v = vids[i];
+        var blob = await fetchThumb(v);
+        if (blob) zip.file(String(i + 1).padStart(width, '0') + '_' + jstDate(v.publishedAt) + '_' + safe(v.title, 80) + '.jpg', blob);
+        else failed++;
+        done++;
+        say('サムネイルを集めています　' + done + ' / ' + vids.length + ' 本', done / vids.length);
+      }
+    }
+    await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
+
+    say('zipファイルにまとめています…', 1);
+    var out = await zip.generateAsync({ type: 'blob' });
+    var name = 'サムネイル_' + safe(j.channel.title, 40) + '_' + ORDER_NAME[order] + '.zip';
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(out);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+
+    say('保存しました。「ダウンロード」フォルダの「' + name + '」に、' + (vids.length - failed) + '本のサムネイルが入っています。'
+      + (failed ? '（' + failed + '本は画像を受け取れませんでした）' : '')
+      + (j.capped ? '　このチャンネルは動画が多いため、新しいほうから500本を対象にしました。' : ''));
+    go.disabled = false;
+  });
+</script>
+</body>
+</html>
