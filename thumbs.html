@@ -58,6 +58,7 @@
       <p class="hint">ショートとライブは含みません。新しいほうから最大500本が対象です。</p>
     </div>
     <button id="go" type="submit">サムネイルをまとめて保存</button>
+    <p class="hint">Chrome・Edgeでは、押すと保存する場所を選ぶ画面が出ます。Safariでは「ダウンロード」フォルダに保存されます。</p>
     <div id="status" role="status" aria-live="polite"></div>
   </form>
 </main>
@@ -119,6 +120,30 @@
     var order = form.order.value;
     var limit = Math.max(1, Math.min(500, Number(document.getElementById('limit').value) || 200));
     go.disabled = true;
+
+    // Chrome・Edgeは保存する場所を最初に選んでもらう（ボタンを押した直後でないと画面を出せない）。Safariは選べないので「ダウンロード」へ
+    var handle = null;
+    if (window.showSaveFilePicker) {
+      var hm = /(@[^\/?#\s]+)/.exec(channel);
+      try {
+        handle = await window.showSaveFilePicker({
+          suggestedName: 'サムネイル_' + (hm ? safe(decodeURIComponent(hm[1]), 40) + '_' : '') + ORDER_NAME[order] + '.zip',
+          types: [{ description: 'zipファイル', accept: { 'application/zip': ['.zip'] } }]
+        });
+      } catch (err) {
+        if (err && err.name === 'AbortError') {
+          say('保存する場所が選ばれなかったので、やめました。もう一度ボタンを押すと、やり直せます。');
+          go.disabled = false;
+          return;
+        }
+        handle = null;
+      }
+    }
+    // 途中でやめたときは、選んだ場所にできた空のファイルを消す
+    function abandon() {
+      if (handle && handle.remove) handle.remove().catch(function () {});
+    }
+
     say('チャンネルの動画の一覧を受け取っています。数十秒かかることがあります…');
 
     var j;
@@ -126,11 +151,13 @@
       var res = await fetch(LEDGER + '?action=thumbs&key=' + encodeURIComponent(key) + '&channel=' + encodeURIComponent(channel), { credentials: 'omit' });
       j = await res.json();
     } catch (err) {
+      abandon();
       say('通信に失敗しました。インターネットの接続を確かめて、もう一度ボタンを押してください。');
       go.disabled = false;
       return;
     }
     if (!j.ok) {
+      abandon();
       if (j.stopped) return stopPage(j.message);
       say(j.message);
       go.disabled = false;
@@ -138,6 +165,7 @@
     }
     var vids = j.videos.slice();
     if (!vids.length) {
+      abandon();
       say('このチャンネルには、保存できる動画がありませんでした（ショートとライブは含みません）。');
       go.disabled = false;
       return;
@@ -166,15 +194,29 @@
     say('zipファイルにまとめています…', 1);
     var out = await zip.generateAsync({ type: 'blob' });
     var name = 'サムネイル_' + safe(j.channel.title, 40) + '_' + ORDER_NAME[order] + '.zip';
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(out);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+    var where;
+    if (handle) {
+      try {
+        var w = await handle.createWritable();
+        await w.write(out);
+        await w.close();
+        where = '選んだ場所に「' + handle.name + '」として保存しました。';
+      } catch (err) {
+        handle = null;
+      }
+    }
+    if (!handle) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(out);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
+      where = '「ダウンロード」フォルダに「' + name + '」として保存しました。';
+    }
 
-    say('保存しました。「ダウンロード」フォルダの「' + name + '」に、' + (vids.length - failed) + '本のサムネイルが入っています。'
+    say(where + (vids.length - failed) + '本のサムネイルが入っています。'
       + (failed ? '（' + failed + '本は画像を受け取れませんでした）' : '')
       + (j.capped ? '　このチャンネルは動画が多いため、新しいほうから500本を対象にしました。' : ''));
     go.disabled = false;
