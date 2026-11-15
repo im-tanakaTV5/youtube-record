@@ -58,7 +58,7 @@
       <p class="hint">ショートとライブは含みません。新しいほうから最大500本が対象です。</p>
     </div>
     <button id="go" type="submit">サムネイルをまとめて保存</button>
-    <p class="hint">Chrome・Edgeでは、押すと保存する場所を選ぶ画面が出ます。Safariでは「ダウンロード」フォルダに保存されます。</p>
+    <p class="hint">Chrome・Edgeでは、押すと保存する場所を選ぶ画面が出ます。Safariでは、ブラウザのダウンロードの保存先（ふつうは「ダウンロード」フォルダ）に保存されます。</p>
     <div id="status" role="status" aria-live="polite"></div>
   </form>
 </main>
@@ -213,7 +213,7 @@
       a.click();
       a.remove();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 60000);
-      where = '「ダウンロード」フォルダに「' + name + '」として保存しました。';
+      where = 'ブラウザのダウンロードの保存先（ふつうは「ダウンロード」フォルダ）に「' + name + '」として保存しました。';
     }
 
     say(where + (vids.length - failed) + '本のサムネイルが入っています。'
