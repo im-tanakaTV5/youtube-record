@@ -183,29 +183,38 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!/^ytk-[0-9a-f]{20}$/.test(key)) { stopPage('このリンクは使えません。担当者から受け取ったリンクを、そのまま開いてください。'); return; }
 
   // ---------- 画像 ----------
+  // 読み込めた画像だけを使う。表示できない形式（ChromeのTIFFなど）は前の画像を残してお知らせする
   const setImage = (file) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    if (imgUrl) URL.revokeObjectURL(imgUrl);
-    imgUrl = URL.createObjectURL(file);
-    const im = $('mini');
-    im.onload = () => {
-      const r = im.naturalWidth / im.naturalHeight;
-      const hint = $('imgHint');
-      if (Math.abs(r - 16 / 9) > 0.02) {
-        hint.textContent = `この画像は縦横の比率が16:9ではありません（${im.naturalWidth}×${im.naturalHeight}）。YouTubeでは黒い帯が入ります。`;
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const probe = new Image();
+    const hint = $('imgHint');
+    probe.onerror = () => {
+      URL.revokeObjectURL(url);
+      hint.textContent = 'この形式はこのブラウザでは表示できません。YouTubeのサムネイルと同じJPG・PNG・GIFで書き出したものを選んでください。';
+      hint.className = 'hint warn';
+      $('file').value = '';
+    };
+    probe.onload = () => {
+      if (imgUrl) URL.revokeObjectURL(imgUrl);
+      imgUrl = url;
+      const w = probe.naturalWidth, h = probe.naturalHeight;
+      if (Math.abs(w / h - 16 / 9) > 0.02) {
+        hint.textContent = `この画像は縦横の比率が16:9ではありません（${w}×${h}）。YouTubeでは黒い帯が入ります。`;
         hint.className = 'hint warn';
-      } else if (im.naturalWidth < 1280) {
-        hint.textContent = `この画像は横幅が${im.naturalWidth}ピクセルです。YouTubeのおすすめは1280×720以上です。`;
+      } else if (w < 1280) {
+        hint.textContent = `この画像は横幅が${w}ピクセルです。YouTubeのおすすめは1280×720以上です。`;
         hint.className = 'hint warn';
       } else {
-        hint.textContent = `${im.naturalWidth}×${im.naturalHeight}。画像はこのパソコンの中だけで使い、どこにも送りません。`;
+        hint.textContent = `${w}×${h}。画像はこのパソコンの中だけで使い、どこにも送りません。`;
         hint.className = 'hint';
       }
+      $('mini').src = url;
+      $('drop').classList.add('has-image');
+      $('dropText').textContent = file.name + '（押すと選び直せます）';
+      render();
     };
-    im.src = imgUrl;
-    $('drop').classList.add('has-image');
-    $('dropText').textContent = file.name + '（押すと選び直せます）';
-    render();
+    probe.src = url;
   };
   $('file').addEventListener('change', (e) => setImage(e.target.files[0]));
   const drop = $('drop');
