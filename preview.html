@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="description" content="作ったサムネイルとタイトルが、YouTubeに並んだときにどう見えるかを公開前に確かめるページ">
+<title>公開前のサムネイル・タイトル確認</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #1f1f1f; --dim: #5f5f5f; --line: #c9c9c9; --bg: #f4f4f4; --paper: #ffffff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif; font-size: 15px; line-height: 1.8; word-break: auto-phrase; text-wrap: pretty; }
+  main { max-width: 1240px; margin: 40px auto 80px; padding: 0 16px; }
+  h1 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  .lead { margin: 0 0 24px; color: var(--dim); }
+  .form { max-width: 640px; padding: 24px; background: var(--paper); border: 1px solid var(--line); }
+  .field { margin: 0 0 20px; }
+  .field > label, .field > .name { display: block; margin-bottom: 6px; font-weight: 600; }
+  .hint { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+  .hint.warn { color: var(--ink); font-weight: 600; }
+  input[type=text] { width: 100%; padding: 10px; border: 1px solid #8a8a8a; border-radius: 0; background: #fff; color: var(--ink); font: inherit; }
+  input.short { width: 8em; }
+  .drop { display: flex; align-items: center; gap: 16px; padding: 12px; border: 1px dashed #8a8a8a; background: #fafafa; cursor: pointer; }
+  .drop.is-over { border-style: solid; border-color: var(--ink); }
+  .drop img { width: 160px; aspect-ratio: 16 / 9; object-fit: contain; background: #000; display: none; }
+  .drop.has-image img { display: block; }
+  .drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .count { float: right; font-weight: 400; color: var(--dim); font-size: 13px; }
+  button { padding: 13px 20px; border: 1px solid var(--ink); border-radius: 0; background: var(--ink); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.go { width: 100%; }
+  button:disabled { background: var(--dim); border-color: var(--dim); cursor: default; }
+  input:focus-visible, button:focus-visible, .drop:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+  #status { margin: 16px 0 0; min-height: 1.8em; }
+  .stop { max-width: 640px; padding: 24px; background: var(--paper); border: 1px solid var(--line); }
+
+  .result { display: none; margin-top: 40px; }
+  .result.is-on { display: block; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; margin-bottom: 20px; }
+  .seg { display: inline-flex; border: 1px solid var(--ink); }
+  .seg button { padding: 6px 14px; border: 0; background: transparent; color: var(--ink); font-weight: 400; }
+  .seg button[aria-pressed=true] { background: var(--ink); color: #fff; }
+  .check { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .check input { accent-color: var(--ink); }
+  .place { margin: 0 0 36px; }
+  .place h2 { margin: 0 0 2px; font-size: 16px; font-weight: 600; }
+  .place .hint { margin: 0 0 10px; }
+  .scroll { overflow-x: auto; }
+
+  /* ここから下はYouTubeの見た目に合わせた見本。大きさ・文字の決まりはYouTubeの画面に合わせてある */
+  .yt { --yt-bg: #fff; --yt-text: #0f0f0f; --yt-sub: #606060; --yt-mark: #065fd4;
+    background: var(--yt-bg); color: var(--yt-text); font-family: "Roboto", "Arial", sans-serif; padding: 24px; word-break: normal; text-wrap: wrap; line-height: normal; }
+  .yt.is-dark { --yt-bg: #0f0f0f; --yt-text: #f1f1f1; --yt-sub: #aaa; --yt-mark: #3ea6ff; }
+  .yt a { color: inherit; text-decoration: none; }
+  .yt .thumb { position: relative; display: block; overflow: hidden; background: #000; }
+  .yt .thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .yt .thumb img.cover { object-fit: cover; }
+  .yt .dur { position: absolute; right: 8px; bottom: 8px; padding: 1px 4px; border-radius: 4px; background: rgba(0,0,0,.8); color: #fff; font-size: 12px; font-weight: 500; line-height: 18px; }
+  .yt .dur.live { background: #cc0000; }
+  .yt .icon { flex: none; border-radius: 50%; background: #888; object-fit: cover; }
+  .yt .t { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; margin: 0; font-weight: 500; }
+  .yt .m { color: var(--yt-sub); }
+  .yt .mine { outline: 3px solid var(--yt-mark); outline-offset: 6px; border-radius: 12px; }
+  .yt.no-mark .mine { outline: 0; }
+
+  .home { display: grid; grid-template-columns: repeat(auto-fill, 360px); gap: 40px 16px; }
+  .home .card { width: 360px; }
+  .home .thumb { width: 360px; height: 202px; border-radius: 12px; }
+  .home .info { display: flex; gap: 12px; margin-top: 12px; }
+  .home .icon { width: 36px; height: 36px; }
+  .home .t { font-size: 16px; line-height: 22px; max-height: 44px; -webkit-line-clamp: 2; }
+  .home .m { font-size: 14px; line-height: 20px; margin-top: 4px; }
+
+  .search { display: flex; flex-direction: column; gap: 16px; min-width: 900px; }
+  .search .card { display: flex; gap: 16px; }
+  .search .thumb { flex: none; width: 360px; height: 202px; border-radius: 12px; }
+  .search .t { font-size: 18px; line-height: 26px; max-height: 52px; -webkit-line-clamp: 2; font-weight: 400; }
+  .search .m { font-size: 12px; line-height: 18px; }
+  .search .ch { display: flex; align-items: center; gap: 8px; margin: 12px 0; font-size: 12px; color: var(--yt-sub); }
+  .search .icon { width: 24px; height: 24px; }
+
+  .side { display: flex; flex-direction: column; gap: 8px; width: 402px; }
+  .side .card { display: flex; gap: 8px; }
+  .side .thumb { flex: none; width: 168px; height: 94px; border-radius: 8px; }
+  .side .t { font-size: 14px; line-height: 20px; max-height: 40px; -webkit-line-clamp: 2; }
+  .side .m { font-size: 12px; line-height: 18px; }
+  .side .m:first-of-type { margin-top: 4px; }
+
+  .phone { width: 375px; padding: 0; border: 1px solid var(--line); }
+  .phone .card { padding-bottom: 20px; }
+  .phone .thumb { width: 375px; height: 211px; }
+  .phone .info { display: flex; gap: 12px; padding: 12px 12px 0; }
+  .phone .icon { width: 36px; height: 36px; }
+  .phone .t { font-size: 14px; line-height: 20px; max-height: 40px; -webkit-line-clamp: 2; font-weight: 400; }
+  .phone .m { font-size: 12px; line-height: 18px; margin-top: 2px; }
+  .phone .mine { outline-offset: -3px; border-radius: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>公開前のサムネイル・タイトル確認</h1>
+  <p class="lead">作ったサムネイルとタイトルが、YouTubeに並んだときにどう見えるかを、公開前に確かめられます。</p>
+
+  <form class="form" id="form">
+    <div class="field">
+      <span class="name">サムネイル画像</span>
+      <label class="drop" id="drop">
+        <img id="mini" alt="選んだサムネイル">
+        <span id="dropText">ここを押して画像を選ぶか、画像をここに置いてください</span>
+        <input id="file" type="file" accept="image/*">
+      </label>
+      <p class="hint" id="imgHint">画像はこのパソコンの中だけで使い、どこにも送りません。</p>
+    </div>
+    <div class="field">
+      <label for="title">タイトル <span class="count" id="count">0 / 100文字</span></label>
+      <input id="title" type="text" maxlength="100" autocomplete="off" required>
+    </div>
+    <div class="field">
+      <label for="q">並べる相手（キーワード）</label>
+      <input id="q" type="text" autocomplete="off" placeholder="例：エレキギター 音作り">
+      <p class="hint">入れると、YouTubeでそのキーワードを実際に検索した上位の動画と並べます。空欄なら、自分のチャンネルの最近の動画と並べます。</p>
+    </div>
+    <div class="field">
+      <label for="dur">動画の長さ（入れなくても使えます）</label>
+      <input id="dur" class="short" type="text" autocomplete="off" placeholder="12:34">
+    </div>
+    <button class="go" id="go" type="submit">並べて見る</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </form>
+
+  <section class="result" id="result" aria-label="並べた見本">
+    <div class="bar">
+      <div class="seg" role="group" aria-label="画面の色">
+        <button type="button" data-theme="light" aria-pressed="true">明るい画面</button>
+        <button type="button" data-theme="dark" aria-pressed="false">暗い画面</button>
+      </div>
+      <label class="check"><input type="checkbox" id="mark" checked>自分の動画を青い枠で囲む</label>
+    </div>
+    <p class="hint">タイトルとサムネイルは、上の欄を直すとすぐに反映されます。並べる相手を変えたときは、もう一度「並べて見る」を押してください。</p>
+
+    <div class="place">
+      <h2>パソコン：ホーム</h2>
+      <p class="hint">トップページのおすすめの並びです。</p>
+      <div class="scroll"><div class="yt"><div class="home" id="home"></div></div></div>
+    </div>
+    <div class="place">
+      <h2>パソコン：検索結果</h2>
+      <p class="hint">キーワードで探したときの並びです。</p>
+      <div class="scroll"><div class="yt"><div class="search" id="search"></div></div></div>
+    </div>
+    <div class="place">
+      <h2>パソコン：再生画面の右側</h2>
+      <p class="hint">ほかの動画を見ている人の画面の右側に出る、おすすめの並びです。いちばん小さく表示されます。</p>
+      <div class="scroll"><div class="yt"><div class="side" id="side"></div></div></div>
+    </div>
+    <div class="place">
+      <h2>スマホ：ホーム</h2>
+      <p class="hint">スマホのアプリで、横幅いっぱいに出るときの見え方です。</p>
+      <div class="scroll"><div class="yt phone"><div id="phone"></div></div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const LEDGER = 'https://script.google.com/macros/s/AKfycbwQY7jCnHLJxWXFYtVxx8_DqrKZT-c7tAriPBzJBoPLDC5gGSmx2KHVmqPcBuFqFJ_a/exec';
+  const key = new URLSearchParams(location.search).get('key') || '';
+  const $ = (id) => document.getElementById(id);
+  const form = $('form');
+  const statusEl = $('status');
+  let imgUrl = '';
+  let data = null;
+
+  const stopPage = (text) => {
+    const p = document.createElement('p');
+    p.className = 'stop';
+    p.textContent = text;
+    form.replaceWith(p);
+    $('result').remove();
+  };
+  if (!/^ytk-[0-9a-f]{20}$/.test(key)) { stopPage('このリンクは使えません。担当者から受け取ったリンクを、そのまま開いてください。'); return; }
+
+  // ---------- 画像 ----------
+  const setImage = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    if (imgUrl) URL.revokeObjectURL(imgUrl);
+    imgUrl = URL.createObjectURL(file);
+    const im = $('mini');
+    im.onload = () => {
+      const r = im.naturalWidth / im.naturalHeight;
+      const hint = $('imgHint');
+      if (Math.abs(r - 16 / 9) > 0.02) {
+        hint.textContent = `この画像は縦横の比率が16:9ではありません（${im.naturalWidth}×${im.naturalHeight}）。YouTubeでは黒い帯が入ります。`;
+        hint.className = 'hint warn';
+      } else if (im.naturalWidth < 1280) {
+        hint.textContent = `この画像は横幅が${im.naturalWidth}ピクセルです。YouTubeのおすすめは1280×720以上です。`;
+        hint.className = 'hint warn';
+      } else {
+        hint.textContent = `${im.naturalWidth}×${im.naturalHeight}。画像はこのパソコンの中だけで使い、どこにも送りません。`;
+        hint.className = 'hint';
+      }
+    };
+    im.src = imgUrl;
+    $('drop').classList.add('has-image');
+    $('dropText').textContent = file.name + '（押すと選び直せます）';
+    render();
+  };
+  $('file').addEventListener('change', (e) => setImage(e.target.files[0]));
+  const drop = $('drop');
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.classList.remove('is-over'); setImage(e.dataTransfer.files[0]); });
+
+  $('title').addEventListener('input', () => { $('count').textContent = `${Array.from($('title').value).length} / 100文字`; render(); });
+  $('dur').addEventListener('input', render);
+
+  // ---------- 表示の決まり（YouTubeの日本語の画面に合わせる） ----------
+  const viewsText = (n) => {
+    if (n === null || n === undefined) return '';
+    const unit = (v, u) => (v < 10 ? (Math.floor(v * 10) / 10).toFixed(1).replace(/\.0$/, '') : Math.floor(v)) + u;
+    if (n >= 1e8) return unit(n / 1e8, '億') + ' 回視聴';
+    if (n >= 1e4) return unit(n / 1e4, '万') + ' 回視聴';
+    return n + ' 回視聴';
+  };
+  const agoText = (iso) => {
+    const s = (Date.now() - new Date(iso)) / 1000;
+    const steps = [[31536000, '年'], [2592000, 'か月'], [604800, '週間'], [86400, '日'], [3600, '時間'], [60, '分']];
+    for (const [sec, u] of steps) if (s >= sec) return Math.floor(s / sec) + ' ' + u + '前';
+    return 'たった今';
+  };
+  const durText = (iso) => {
+    const m = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(iso || '');
+    if (!m) return '';
+    const h = +(m[1] || 0), mi = +(m[2] || 0), se = +(m[3] || 0);
+    const p2 = (x) => String(x).padStart(2, '0');
+    return h ? `${h}:${p2(mi)}:${p2(se)}` : `${mi}:${p2(se)}`;
+  };
+
+  const el = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const thumbEl = (v) => {
+    const t = el('div', 'thumb');
+    const im = el('img', v.mine ? '' : 'cover');
+    im.alt = '';
+    im.src = v.thumb || '';
+    t.append(im);
+    if (v.live) t.append(el('span', 'dur live', 'ライブ'));
+    else if (v.dur) t.append(el('span', 'dur', v.dur));
+    return t;
+  };
+  const iconEl = (v) => {
+    const i = el('img', 'icon');
+    i.alt = '';
+    if (v.icon) i.src = v.icon;
+    return i;
+  };
+  const meta = (v) => v.mine ? '0 回視聴・たった今' : [viewsText(v.views), agoText(v.publishedAt)].filter(Boolean).join('・');
+
+  // 自分の動画は2番目に入れる（いちばん上より、ほかの動画に挟まれたほうが比べやすい）
+  const list = (n) => {
+    const mine = { mine: true, title: $('title').value || 'ここにタイトルが入ります', channel: data.me.title, icon: data.me.icon, thumb: imgUrl, dur: $('dur').value.trim() };
+    const others = data.videos.map((v) => ({ ...v, dur: durText(v.duration) }));
+    const out = others.slice(0, n - 1);
+    out.splice(Math.min(1, out.length), 0, mine);
+    return out;
+  };
+
+  function render() {
+    if (!data) return;
+    const home = $('home'); home.textContent = '';
+    list(6).forEach((v) => {
+      const c = el('div', 'card' + (v.mine ? ' mine' : ''));
+      const info = el('div', 'info');
+      const tx = el('div');
+      tx.append(el('h3', 't', v.title), el('div', 'm', v.channel), el('div', 'm', meta(v)));
+      info.append(iconEl(v), tx);
+      c.append(thumbEl(v), info);
+      home.append(c);
+    });
+
+    const search = $('search'); search.textContent = '';
+    list(5).forEach((v) => {
+      const c = el('div', 'card' + (v.mine ? ' mine' : ''));
+      const tx = el('div');
+      const ch = el('div', 'ch');
+      ch.append(iconEl(v), el('span', '', v.channel));
+      tx.append(el('h3', 't', v.title), el('div', 'm', meta(v)), ch);
+      c.append(thumbEl(v), tx);
+      search.append(c);
+    });
+
+    const side = $('side'); side.textContent = '';
+    list(8).forEach((v) => {
+      const c = el('div', 'card' + (v.mine ? ' mine' : ''));
+      const tx = el('div');
+      tx.append(el('h3', 't', v.title), el('div', 'm', v.channel), el('div', 'm', meta(v)));
+      c.append(thumbEl(v), tx);
+      side.append(c);
+    });
+
+    const phone = $('phone'); phone.textContent = '';
+    list(4).forEach((v) => {
+      const c = el('div', 'card' + (v.mine ? ' mine' : ''));
+      const info = el('div', 'info');
+      const tx = el('div');
+      tx.append(el('h3', 't', v.title), el('div', 'm', [v.channel, meta(v)].join('・')));
+      info.append(iconEl(v), tx);
+      c.append(thumbEl(v), info);
+      phone.append(c);
+    });
+  }
+
+  document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.seg button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    document.querySelectorAll('.yt').forEach((y) => y.classList.toggle('is-dark', b.dataset.theme === 'dark'));
+  }));
+  $('mark').addEventListener('change', (e) => document.querySelectorAll('.yt').forEach((y) => y.classList.toggle('no-mark', !e.target.checked)));
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!imgUrl) { statusEl.textContent = 'サムネイル画像を選んでください。'; return; }
+    const q = $('q').value.trim();
+    $('go').disabled = true;
+    statusEl.textContent = q ? '「' + q + '」でYouTubeを検索しています…' : '自分のチャンネルの最近の動画を受け取っています…';
+    let j;
+    try {
+      const res = await fetch(LEDGER + '?action=preview&key=' + encodeURIComponent(key) + '&q=' + encodeURIComponent(q), { credentials: 'omit' });
+      j = await res.json();
+    } catch (err) {
+      statusEl.textContent = '通信に失敗しました。インターネットの接続を確かめて、もう一度ボタンを押してください。';
+      $('go').disabled = false;
+      return;
+    }
+    $('go').disabled = false;
+    if (!j.ok) {
+      if (j.stopped) { stopPage(j.message); return; }
+      statusEl.textContent = j.message;
+      return;
+    }
+    if (!j.videos.length) { statusEl.textContent = '並べる動画が見つかりませんでした。別のキーワードで試してください。'; return; }
+    data = j;
+    statusEl.textContent = j.source === 'search' ? '「' + q + '」の検索結果の上位と並べました。下に表示しています。' : '自分のチャンネルの最近の動画と並べました。下に表示しています。';
+    $('result').classList.add('is-on');
+    render();
+    $('result').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+});
+</script>
+</body>
+</html>
